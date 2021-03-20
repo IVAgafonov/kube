@@ -1,0 +1,202 @@
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: service-reader
+rules:
+  - verbs:
+      - get
+      - watch
+      - list
+      - create
+      - update
+      - patch
+    apiGroups:
+      - ''
+      - extensions
+    resources:
+      - namespaces
+      - nodes
+      - ingresses
+      - ingresses/status
+      - pods
+      - configmaps
+      - events
+      - endpoints
+      - persistentvolumeclaims
+      - replicationcontrollers
+      - replicationcontrollers/scale
+      - secrets
+      - serviceaccounts
+      - services
+      - services/proxy
+
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: service-reader-pod
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: service-reader
+
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: default-http-backend-nginx
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: default-http-backend-nginx
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        k8s-app: default-http-backend-nginx
+    spec:
+      containers:
+        - name: default-http-backend-nginx
+          image: nginx
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 10m
+              memory: 20Mi
+            requests:
+              cpu: 10m
+              memory: 20Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+              scheme: HTTP
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: default-http-backend
+  namespace: default
+  labels:
+    k8s-app: default-http-backend
+spec:
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  selector:
+    k8s-app: default-http-backend-nginx
+  type: ClusterIP
+  sessionAffinity: None
+
+
+---
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: nginx-ingress-controller
+  namespace: default
+  labels:
+    k8s-app: nginx-ingress-controller
+    namespace: default
+spec:
+  selector:
+    matchLabels:
+      k8s-app: nginx-ingress-controller
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        k8s-app: nginx-ingress-controller
+    spec:
+      containers:
+        - name: nginx-ingress-lb
+          image: 'gcr.io/google_containers/nginx-ingress-controller:0.9.0-beta.14'
+          args:
+            - /nginx-ingress-controller
+            - '--default-backend-service=$(POD_NAMESPACE)/default-http-backend'
+          ports:
+            - hostPort: 80
+              containerPort: 80
+              protocol: TCP
+            - hostPort: 443
+              containerPort: 443
+              protocol: TCP
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+          resources: {}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: 10
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      securityContext: {}
+      schedulerName: default-scheduler
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 2
+  revisionHistoryLimit: 10
+

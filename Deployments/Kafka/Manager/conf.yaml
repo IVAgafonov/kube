@@ -1,0 +1,111 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: kafka-manager-deployment
+  namespace: kafka
+  labels:
+    app: kafka-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-manager
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: kafka-manager
+    spec:
+      containers:
+        - name: kafka-manager
+          image: 'kafkamanager/kafka-manager:latest'
+          ports:
+            - containerPort: 9000
+              protocol: TCP
+          env:
+            - name: ZK_HOSTS
+              value: 'zkd-0.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-1.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-2.zkd-hs.zookeeper.svc.cluster.local:2181'
+            - name: APPLICATION_SECRET
+              value: vsvs7d8sd5h8s4sd34s6dh8s9sd564s74hdhs78h5s74hs8d
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: kafka-manager-service
+  namespace: kafka
+spec:
+  ports:
+    - protocol: TCP
+      port: 9000
+      targetPort: 9000
+  selector:
+    app: kafka-manager
+  type: ClusterIP
+  sessionAffinity: None
+
+---
+kind: Ingress
+apiVersion: extensions/v1beta1
+metadata:
+  name: kafka-manager
+  namespace: kafka
+  annotations:
+    ingress.kubernetes.io/auth-realm: Authentication Required - ok
+    ingress.kubernetes.io/auth-secret: basic-auth
+    ingress.kubernetes.io/auth-type: basic
+    ingress.kubernetes.io/ssl-redirect: 'true'
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - kafka.host
+      secretName: default-secret-tls
+  rules:
+    - host: kafka.host
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              serviceName: kafka-manager-service
+              servicePort: 9000
+
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: basic-auth
+  namespace: kafka
+data:
+  auth: basic-auth-str
+type: Opaque
+
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: default-secret-tls
+  namespace: kafka
+data:
+  tls.crt: >-
+    cert
+  tls.key: >-
+    key
+type: kubernetes.io/tls

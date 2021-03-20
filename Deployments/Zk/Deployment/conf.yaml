@@ -1,0 +1,166 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: zookeeper
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: zkd-cs
+  namespace: zookeeper
+  labels:
+    app: zkd
+spec:
+  ports:
+    - name: client
+      protocol: TCP
+      port: 2181
+      targetPort: 2181
+  selector:
+    app: zkd
+  clusterIP: None
+  type: ClusterIP
+  sessionAffinity: None
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: zkd-hs
+  namespace: zookeeper
+  labels:
+    app: zkd
+spec:
+  ports:
+    - name: server
+      protocol: TCP
+      port: 2888
+      targetPort: 2888
+    - name: leader-election
+      protocol: TCP
+      port: 3888
+      targetPort: 3888
+  selector:
+    app: zkd
+  clusterIP: None
+  type: ClusterIP
+  sessionAffinity: None
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: zookeeper-config
+  namespace: zookeeper
+data:
+  zoo.cfg: |
+    clientPort=2181
+    dataDir=/var/lib/zookeeper/data
+    dataLogDir=/var/lib/zookeeper/data/log
+    tickTime=2000
+    initLimit=10
+    syncLimit=5
+    maxClientCnxns=60
+    minSessionTimeout=4000
+    maxSessionTimeout=40000
+    autopurge.snapRetainCount=3
+    autopurge.purgeInteval=12
+    server.1=zkd-0.zkd-hs.zookeeper.svc.cluster.local:2888:3888
+    server.2=zkd-1.zkd-hs.zookeeper.svc.cluster.local:2888:3888
+    server.3=zkd-2.zkd-hs.zookeeper.svc.cluster.local:2888:3888
+
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: zkd-0
+  namespace: zookeeper
+  labels:
+    app: zkd
+spec:
+  volumes:
+    - name: zookeeper-config
+      configMap:
+        name: zookeeper-config
+        defaultMode: 420
+  containers:
+    - name: kubernetes-zookeeper-d
+      image: 'k8s.gcr.io/kubernetes-zookeeper:1.0-3.4.10'
+      command:
+        - sh
+        - '-c'
+        - >-
+          start-zookeeper --servers=3 --data_dir=/var/lib/zookeeper/data
+          --data_log_dir=/var/lib/zookeeper/data/log
+          --conf_dir=/opt/zookeeper/conf --client_port=2181 --election_port=3888
+          --server_port=2888 --tick_time=2000 --init_limit=10 --sync_limit=5
+          --heap=512M --max_client_cnxns=60 --snap_retain_count=3
+          --purge_interval=12 --max_session_timeout=40000
+          --min_session_timeout=4000 --log_level=INFO
+      ports:
+        - name: client
+          containerPort: 2181
+          protocol: TCP
+        - name: server
+          containerPort: 2888
+          protocol: TCP
+        - name: leader-election
+          containerPort: 3888
+          protocol: TCP
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+      volumeMounts:
+        - name: zookeeper-config
+          mountPath: /opt/zookeeper/conf/zoo.cfg
+          subPath: zoo.cfg
+      livenessProbe:
+        exec:
+          command:
+            - sh
+            - '-c'
+            - zookeeper-ready 2181
+        initialDelaySeconds: 10
+        timeoutSeconds: 5
+        periodSeconds: 10
+        successThreshold: 1
+        failureThreshold: 3
+      readinessProbe:
+        exec:
+          command:
+            - sh
+            - '-c'
+            - zookeeper-ready 2181
+        initialDelaySeconds: 10
+        timeoutSeconds: 5
+        periodSeconds: 10
+        successThreshold: 1
+        failureThreshold: 3
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      imagePullPolicy: Always
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 30
+  dnsPolicy: ClusterFirst
+  serviceAccountName: default
+  serviceAccount: default
+  securityContext:
+    runAsUser: 1000
+    fsGroup: 1000
+  hostname: zkd-0
+  subdomain: zkd-hs
+  schedulerName: default-scheduler
+  tolerations:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+  priority: 0
+  enableServiceLinks: true
+  preemptionPolicy: PreemptLowerPriority

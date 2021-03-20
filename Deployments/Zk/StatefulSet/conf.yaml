@@ -1,0 +1,150 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: zookeeper
+
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: zk
+  namespace: zookeeper
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: zk
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: zk
+    spec:
+      containers:
+        - name: kubernetes-zookeeper
+          image: 'k8s.gcr.io/kubernetes-zookeeper:1.0-3.4.10'
+          command:
+            - sh
+            - '-c'
+            - >-
+              start-zookeeper --servers=3 --data_dir=/var/lib/zookeeper/data
+              --data_log_dir=/var/lib/zookeeper/data/log
+              --conf_dir=/opt/zookeeper/conf --client_port=2181
+              --election_port=3888 --server_port=2888 --tick_time=2000
+              --init_limit=10 --sync_limit=5 --heap=512M --max_client_cnxns=60
+              --snap_retain_count=3 --purge_interval=12
+              --max_session_timeout=40000 --min_session_timeout=4000
+              --log_level=INFO
+          ports:
+            - name: client
+              containerPort: 2181
+              protocol: TCP
+            - name: server
+              containerPort: 2888
+              protocol: TCP
+            - name: leader-election
+              containerPort: 3888
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+          volumeMounts:
+            - name: datadir
+              mountPath: /var/lib/zookeeper
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - '-c'
+                - zookeeper-ready 2181
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - '-c'
+                - zookeeper-ready 2181
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - zk
+              topologyKey: kubernetes.io/hostname
+      schedulerName: default-scheduler
+  volumeClaimTemplates:
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        name: datadir
+        creationTimestamp: null
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: local-storage
+        volumeMode: Filesystem
+      status:
+        phase: Pending
+  serviceName: zk-hs
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  revisionHistoryLimit: 10
+
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: datadir
+  annotations:
+    pv.kubernetes.io/bound-by-controller: 'yes'
+  finalizers:
+    - kubernetes.io/pv-protection
+spec:
+  capacity:
+    storage: 10Gi
+  local:
+    path: /var/storage/
+  accessModes:
+    - ReadWriteOnce
+  claimRef:
+    kind: PersistentVolumeClaim
+    namespace: default
+    name: datadir-zk-0
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: local-storage
+  volumeMode: Filesystem
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - hostname1
+                - hostname2
