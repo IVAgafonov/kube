@@ -13,6 +13,7 @@ rules:
     apiGroups:
       - ''
       - extensions
+      - networking.k8s.io
     resources:
       - namespaces
       - nodes
@@ -29,7 +30,6 @@ rules:
       - serviceaccounts
       - services
       - services/proxy
-
 
 ---
 kind: ClusterRoleBinding
@@ -143,7 +143,7 @@ spec:
     spec:
       containers:
         - name: nginx-ingress-lb
-          image: 'gcr.io/google_containers/nginx-ingress-controller:0.9.0-beta.14'
+          image: 'k8s.gcr.io/ingress-nginx/controller:v0.44.0'
           args:
             - /nginx-ingress-controller
             - '--default-backend-service=$(POD_NAMESPACE)/default-http-backend'
