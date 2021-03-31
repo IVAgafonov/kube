@@ -17,6 +17,7 @@ spec:
       protocol: TCP
       port: 2181
       targetPort: 2181
+      hostPort: 2181
   selector:
     app: zkd
   clusterIP: None
@@ -56,6 +57,9 @@ metadata:
 data:
   zoo.cfg: |
     clientPort=2181
+    authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider
+    requireClientAuthScheme=sasl
+    jaasLoginRenew=3600000
     dataDir=/var/lib/zookeeper/data
     dataLogDir=/var/lib/zookeeper/data/log
     tickTime=2000
@@ -66,23 +70,88 @@ data:
     maxSessionTimeout=40000
     autopurge.snapRetainCount=3
     autopurge.purgeInteval=12
-    server.1=zkd-0.zkd-hs.zookeeper.svc.cluster.local:2888:3888
-    server.2=zkd-1.zkd-hs.zookeeper.svc.cluster.local:2888:3888
-    server.3=zkd-2.zkd-hs.zookeeper.svc.cluster.local:2888:3888
+    server.1=host1:2888:3888
+    server.2=host2:2888:3888
+    server.3=host3:2888:3888
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: zookeeper-config-log4j
+  namespace: zookeeper
+data:
+  log4j.properties: |
+    zookeeper.root.logger=CONSOLE
+    zookeeper.console.threshold=DEBUG
+    log4j.rootLogger=\${zookeeper.root.logger}
+    log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+    log4j.appender.CONSOLE.Threshold=\${zookeeper.console.threshold}
+    log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+    log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: zookeeper-config-jaas
+  namespace: zookeeper
+data:
+  zoo-jaas.conf: |
+    Server {
+      org.apache.zookeeper.server.auth.DigestLoginModule required
+      user_super="pass";
+    };
+    Client {
+      org.apache.zookeeper.server.auth.DigestLoginModule required
+      username="super"
+      password="pass";
+    };
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: zookeeper-config-jenv
+  namespace: zookeeper
+data:
+  java.env: |
+    export JVMFLAGS="-Djava.security.auth.login.config=/opt/zookeeper/conf/zoo-jaas.conf -Dzookeeper.authProvider.sasl=org.apache.zookeeper.server.auth.SASLAuthenticationProvider"
 
 ---
 kind: Pod
 apiVersion: v1
 metadata:
-  name: zkd-0
+  name: zkd-2
   namespace: zookeeper
   labels:
     app: zkd
 spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                  - host
   volumes:
     - name: zookeeper-config
       configMap:
         name: zookeeper-config
+        defaultMode: 420
+    - name: zookeeper-config-jaas
+      configMap:
+        name: zookeeper-config-jaas
+        defaultMode: 420
+    - name: zookeeper-config-jenv
+      configMap:
+        name: zookeeper-config-jenv
+        defaultMode: 420
+    - name: zookeeper-config-log4j
+      configMap:
+        name: zookeeper-config-log4j
         defaultMode: 420
   containers:
     - name: kubernetes-zookeeper-d
@@ -91,13 +160,14 @@ spec:
         - sh
         - '-c'
         - >-
-          start-zookeeper --servers=3 --data_dir=/var/lib/zookeeper/data
-          --data_log_dir=/var/lib/zookeeper/data/log
-          --conf_dir=/opt/zookeeper/conf --client_port=2181 --election_port=3888
-          --server_port=2888 --tick_time=2000 --init_limit=10 --sync_limit=5
-          --heap=512M --max_client_cnxns=60 --snap_retain_count=3
-          --purge_interval=12 --max_session_timeout=40000
-          --min_session_timeout=4000 --log_level=INFO
+          echo $MY_ID > /var/lib/zookeeper/data/myid && exec /opt/zookeeper/bin/zkServer.sh start-foreground
+      env:
+        - name: MY_ID
+          value: '3'
+        - name: ZOO_LOG_DIR
+          value: '/var/log/zookeeper'
+        - name: LOGGER_PROPS_FILE
+          value: '/opt/zookeeper/conf/log4j.properties'
       ports:
         - name: client
           containerPort: 2181
@@ -110,12 +180,21 @@ spec:
           protocol: TCP
       resources:
         requests:
-          cpu: 500m
+          cpu: 100m
           memory: 1Gi
       volumeMounts:
         - name: zookeeper-config
           mountPath: /opt/zookeeper/conf/zoo.cfg
           subPath: zoo.cfg
+        - name: zookeeper-config-jaas
+          mountPath: /opt/zookeeper/conf/zoo-jaas.conf
+          subPath: zoo-jaas.conf
+        - name: zookeeper-config-jenv
+          mountPath: /opt/zookeeper/conf/java.env
+          subPath: java.env
+        - name: zookeeper-config-log4j
+          mountPath: /opt/zookeeper/conf/log4j.properties
+          subPath: log4j.properties
       livenessProbe:
         exec:
           command:
@@ -149,7 +228,7 @@ spec:
   securityContext:
     runAsUser: 1000
     fsGroup: 1000
-  hostname: zkd-0
+  hostname: zkd-2
   subdomain: zkd-hs
   schedulerName: default-scheduler
   tolerations:
@@ -164,3 +243,23 @@ spec:
   priority: 0
   enableServiceLinks: true
   preemptionPolicy: PreemptLowerPriority
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: zkd-cs-ex
+  namespace: zookeeper
+  labels:
+    app: zkd
+spec:
+  ports:
+    - name: client
+      protocol: TCP
+      port: 2181
+      targetPort: 2181
+  selector:
+    app: zkd
+  type: NodePort
+  sessionAffinity: None
+  externalTrafficPolicy: Cluster

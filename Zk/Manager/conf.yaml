@@ -1,32 +1,27 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: kafka-manager-deployment
-  namespace: kafka
+  name: zk-manager-deployment
+  namespace: zookeeper
   labels:
-    app: kafka-manager
+    app: zookeeper-manager
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kafka-manager
+      app: zookeeper-manager
   template:
     metadata:
       creationTimestamp: null
       labels:
-        app: kafka-manager
+        app: zookeeper-manager
     spec:
       containers:
-        - name: kafka-manager
-          image: 'kafkamanager/kafka-manager:latest'
+        - name: zookeeper-manager
+          image: 'elkozmon/zoonavigator:latest'
           ports:
             - containerPort: 9000
               protocol: TCP
-          env:
-            - name: ZK_HOSTS
-              value: 'host1:2181,host2:2181'
-            - name: APPLICATION_SECRET
-              value: vsvs7d8sd5h8s4sd34s6dh8s9sd564s74hdhs78h5s74hs8d
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
@@ -45,23 +40,18 @@ spec:
   progressDeadlineSeconds: 600
 
 ---
-# create /kafka-manager/mutex ""
-# create /kafka-manager/mutex/locks ""
-# create /kafka-manager/mutex/leases ""
-
----
 kind: Service
 apiVersion: v1
 metadata:
-  name: kafka-manager-service
-  namespace: kafka
+  name: zookeeper-manager-service
+  namespace: zookeeper
 spec:
   ports:
     - protocol: TCP
-      port: 9000
-      targetPort: 9000
+      port: 9090
+      targetPort: 9090
   selector:
-    app: kafka-manager
+    app: zookeeper-manager
   type: ClusterIP
   sessionAffinity: None
 
@@ -69,49 +59,50 @@ spec:
 kind: Ingress
 apiVersion: extensions/v1beta1
 metadata:
-  name: kafka-manager
-  namespace: kafka
+  name: zookeeper-manager
+  namespace: zookeeper
   annotations:
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/backend-protocol: HTTP
     nginx.ingress.kubernetes.io/ssl-redirect: 'true'
     nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: kafka-secret-basic
+    nginx.ingress.kubernetes.io/auth-secret: zookeeper-secret-basic
     nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
 spec:
   tls:
     - hosts:
-        - kafka.host
-      secretName: default-secret-tls
+        - host
+      secretName: zookeeper-secret-tls
   rules:
-    - host: kafka.host
+    - host: host
       http:
         paths:
           - path: /
             pathType: ImplementationSpecific
             backend:
-              serviceName: kafka-manager-service
-              servicePort: 9000
+              serviceName: zookeeper-manager-service
+              servicePort: 9090
+
+# docker run -d -e HTTP_PORT=9000 --name zn --restart unless-stopped --network=host elkozmon/zoonavigator:latest
+
+# internal service with port forwarding
 
 ---
-kind: Secret
+kind: Service
 apiVersion: v1
 metadata:
-  name: basic-auth
-  namespace: kafka
-data:
-  auth: basic-auth-str
-type: Opaque
-
----
-kind: Secret
-apiVersion: v1
-metadata:
-  name: default-secret-tls
-  namespace: kafka
-data:
-  tls.crt: >-
-    cert
-  tls.key: >-
-    key
-type: kubernetes.io/tls
+  name: zk-manager-ex
+  namespace: zookeeper
+  labels:
+    app: zookeeper-manager
+spec:
+  ports:
+    - name: client
+      protocol: TCP
+      port: 9000
+      targetPort: 9000
+  selector:
+    app: zookeeper-manager
+  type: NodePort
+  sessionAffinity: None
+  externalTrafficPolicy: Cluster

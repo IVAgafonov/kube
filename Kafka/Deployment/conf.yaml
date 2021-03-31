@@ -4,144 +4,6 @@ metadata:
   name: kafka
 
 ---
-kind: Pod
-apiVersion: v1
-metadata:
-  name: kafka-0
-  namespace: kafka
-  labels:
-    app: kafka
-spec:
-  volumes:
-    - name: configmap
-      configMap:
-        name: kafka-config
-        defaultMode: 420
-    - name: config
-      emptyDir: {}
-    - name: extensions
-      emptyDir: {}
-  initContainers:
-    - name: init-config
-      image: >-
-        solsson/kafka-initutils@sha256:f6d9850c6c3ad5ecc35e717308fddb47daffbde18eb93e98e031128fe8b899ef
-      command:
-        - /bin/bash
-        - /etc/kafka-configmap/init.sh
-      env:
-        - name: NODE_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: spec.nodeName
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.name
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.namespace
-      resources: {}
-      volumeMounts:
-        - name: configmap
-          mountPath: /etc/kafka-configmap
-        - name: config
-          mountPath: /etc/kafka
-        - name: extensions
-          mountPath: /opt/kafka/libs/extensions
-      terminationMessagePath: /dev/termination-log
-      terminationMessagePolicy: File
-      imagePullPolicy: IfNotPresent
-  containers:
-    - name: broker
-      image: >-
-        solsson/kafka:2.4.1@sha256:79761e15919b4fe9857ec00313c9df799918ad0340b684c0163ab7035907bb5a
-      command:
-        - ./bin/kafka-server-start.sh
-        - /etc/kafka/server.properties.$(POD_NAME)
-      ports:
-        - name: inside
-          hostPort: 9092
-          containerPort: 9092
-          protocol: TCP
-        - name: outside
-          hostPort: 9094
-          containerPort: 9094
-          protocol: TCP
-        - name: jmx
-          containerPort: 5555
-          protocol: TCP
-      env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.name
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.namespace
-        - name: CLASSPATH
-          value: /opt/kafka/libs/extensions/*
-        - name: KAFKA_LOG4J_OPTS
-          value: '-Dlog4j.configuration=file:/etc/kafka/log4j.properties'
-        - name: JMX_PORT
-          value: '5555'
-      resources:
-        limits:
-          memory: 600Mi
-        requests:
-          cpu: 100m
-          memory: 100Mi
-      volumeMounts:
-        - name: config
-          mountPath: /etc/kafka
-        - name: extensions
-          mountPath: /opt/kafka/libs/extensions
-      readinessProbe:
-        tcpSocket:
-          port: 9092
-        timeoutSeconds: 1
-        periodSeconds: 10
-        successThreshold: 1
-        failureThreshold: 3
-      lifecycle:
-        preStop:
-          exec:
-            command:
-              - sh
-              - '-ce'
-              - kill -s TERM 1; while $(kill -0 1 2>/dev/null); do sleep 1; done
-      terminationMessagePath: /dev/termination-log
-      terminationMessagePolicy: File
-      imagePullPolicy: IfNotPresent
-  restartPolicy: Always
-  terminationGracePeriodSeconds: 30
-  dnsPolicy: ClusterFirst
-  serviceAccountName: default
-  serviceAccount: default
-  securityContext: {}
-  hostname: kafka-0
-  subdomain: kafka
-  schedulerName: default-scheduler
-  tolerations:
-    - key: node.kubernetes.io/not-ready
-      operator: Exists
-      effect: NoExecute
-      tolerationSeconds: 300
-    - key: node.kubernetes.io/unreachable
-      operator: Exists
-      effect: NoExecute
-      tolerationSeconds: 300
-  priority: 0
-  enableServiceLinks: true
-  preemptionPolicy: PreemptLowerPriority
-
----
 kind: ConfigMap
 apiVersion: v1
 metadata:
@@ -559,6 +421,167 @@ data:
     rebalances during application startup.
 
     #group.initial.rebalance.delay.ms=0
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kafka
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: kafka
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: service-reader
+
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: kafka-0
+  namespace: kafka
+  labels:
+    app: kafka
+spec:
+  volumes:
+    - name: configmap
+      configMap:
+        name: kafka-config
+        defaultMode: 420
+    - name: config
+      emptyDir: {}
+    - name: extensions
+      emptyDir: {}
+  initContainers:
+    - name: init-config
+      image: >-
+        solsson/kafka-initutils@sha256:f6d9850c6c3ad5ecc35e717308fddb47daffbde18eb93e98e031128fe8b899ef
+      command:
+        - /bin/bash
+        - /etc/kafka-configmap/init.sh
+      env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+      resources: {}
+      volumeMounts:
+        - name: configmap
+          mountPath: /etc/kafka-configmap
+        - name: config
+          mountPath: /etc/kafka
+        - name: extensions
+          mountPath: /opt/kafka/libs/extensions
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      imagePullPolicy: IfNotPresent
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                  - host
+  containers:
+    - name: broker
+      image: >-
+        solsson/kafka:2.4.1@sha256:79761e15919b4fe9857ec00313c9df799918ad0340b684c0163ab7035907bb5a
+      command:
+        - ./bin/kafka-server-start.sh
+        - /etc/kafka/server.properties.$(POD_NAME)
+      ports:
+        - name: inside
+          hostPort: 9092
+          containerPort: 9092
+          protocol: TCP
+        - name: outside
+          hostPort: 9094
+          containerPort: 9094
+          protocol: TCP
+        - name: jmx
+          containerPort: 5555
+          protocol: TCP
+      env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: CLASSPATH
+          value: /opt/kafka/libs/extensions/*
+        - name: KAFKA_LOG4J_OPTS
+          value: '-Dlog4j.configuration=file:/etc/kafka/log4j.properties'
+        - name: JMX_PORT
+          value: '5555'
+      resources:
+        limits:
+          memory: 600Mi
+        requests:
+          cpu: 100m
+          memory: 100Mi
+      volumeMounts:
+        - name: config
+          mountPath: /etc/kafka
+        - name: extensions
+          mountPath: /opt/kafka/libs/extensions
+      readinessProbe:
+        tcpSocket:
+          port: 9092
+        timeoutSeconds: 1
+        periodSeconds: 10
+        successThreshold: 1
+        failureThreshold: 3
+      lifecycle:
+        preStop:
+          exec:
+            command:
+              - sh
+              - '-ce'
+              - kill -s TERM 1; while $(kill -0 1 2>/dev/null); do sleep 1; done
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      imagePullPolicy: IfNotPresent
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 30
+  dnsPolicy: ClusterFirst
+  serviceAccountName: default
+  serviceAccount: default
+  securityContext: {}
+  hostname: kafka-0
+  subdomain: kafka
+  schedulerName: default-scheduler
+  tolerations:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+  priority: 0
+  enableServiceLinks: true
+  preemptionPolicy: PreemptLowerPriority
 
 ---
 # create /kafka-manager/mutex ""
