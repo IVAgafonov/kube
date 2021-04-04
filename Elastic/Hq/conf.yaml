@@ -28,6 +28,8 @@ spec:
           resources:
             limits:
               cpu: 0.5
+            requests:
+              cpu: 100m
           ports:
             - containerPort: 5000
               name: http

@@ -1,0 +1,112 @@
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name:  hbase-master
+  namespace: apache
+  labels:
+    app: hbase-master
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                  - host
+  containers:
+    - name: hmaster-node
+      image: >-
+        bde2020/hbase-master:1.0.0-hbase1.2.6
+      ports:
+        - name: inside64
+          containerPort: 16000
+          protocol: TCP
+        - name: inside67
+          containerPort: 16010
+          protocol: TCP
+      env:
+        - name: HBASE_CONF_hbase_rootdir
+          value: "hdfs://nn-hadoop.apache-hadoop.apache.svc.cluster.local:8020/hbase"
+        - name: HBASE_CONF_hbase_cluster_distributed
+          value: "true"
+        - name: HBASE_CONF_hbase_zookeeper_quorum
+          value: "zkd-0.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-1.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-2.zkd-hs.zookeeper.svc.cluster.local:2181"
+        - name: HBASE_CONF_hbase_master
+          value: "hbase-master.apache-hbase.apache.svc.cluster.local:16000"
+        - name: HBASE_CONF_hbase_master_hostname
+          value: "hbase-master.apache-hbase.apache.svc.cluster.local"
+        - name: HBASE_CONF_hbase_master_port
+          value: '16000'
+        - name: HBASE_CONF_hbase_master_info_port
+          value: '16010'
+        - name: HBASE_CONF_hbase_regionserver_port
+          value: '16020'
+        - name: HBASE_CONF_hbase_regionserver_info_port
+          value: '16030'
+        - name: HBASE_MANAGES_ZK
+          value: "false"
+      resources:
+        limits:
+          memory: 800Mi
+        requests:
+          cpu: 200m
+          memory: 400Mi
+      readinessProbe:
+        httpGet:
+          path: /
+          port: 16010
+        timeoutSeconds: 1
+        periodSeconds: 10
+        successThreshold: 1
+        failureThreshold: 3
+      terminationMessagePolicy: File
+      imagePullPolicy: IfNotPresent
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 30
+  dnsPolicy: ClusterFirst
+  serviceAccountName: default
+  serviceAccount: default
+  securityContext: {}
+  hostname: hbase-master
+  subdomain: apache-hbase
+  schedulerName: default-scheduler
+  tolerations:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+  priority: 0
+  enableServiceLinks: true
+  preemptionPolicy: PreemptLowerPriority
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: apache-hbase
+  namespace: apache
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: 'true'
+spec:
+  ports:
+    - protocol: TCP
+      name: inside
+      port: 16000
+      targetPort: 16000
+    - protocol: TCP
+      name: inside-info
+      port: 16010
+      targetPort: 16010
+  selector:
+    app: hbase-master
+  clusterIP: None
+  type: ClusterIP
+  sessionAffinity: None
+  publishNotReadyAddresses: true
