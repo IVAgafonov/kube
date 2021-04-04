@@ -587,3 +587,23 @@ spec:
 # create /kafka-manager/mutex ""
 # create /kafka-manager/mutex/locks ""
 # create /kafka-manager/mutex/leases ""
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: kafka
+  namespace: kafka
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: 'true'
+spec:
+  ports:
+    - protocol: TCP
+      port: 9092
+      targetPort: 9092
+  selector:
+    app: kafka
+  clusterIP: None
+  type: ClusterIP
+  sessionAffinity: None
+  publishNotReadyAddresses: true

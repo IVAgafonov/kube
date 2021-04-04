@@ -1,0 +1,120 @@
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: d1-hadoop
+  namespace: apache
+  labels:
+    app: dn-hadoop
+spec:
+  volumes:
+    - name: h-data
+      emptyDir: {}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                  - host
+  containers:
+    - name: d-node
+      image: >-
+        bde2020/hadoop-datanode:2.0.0-hadoop3.1.3-java8
+      ports:
+        - name: inside64
+          containerPort: 9864
+          protocol: TCP
+        - name: inside67
+          containerPort: 9867
+          protocol: TCP
+      env:
+        - name: SERVICE_PRECONDITION
+          value: nn-hadoop.apache-hadoop.apache.svc.cluster.local:9870
+        - name: CORE_CONF_fs_defaultFS
+          value: nn-hadoop.apache-hadoop.apache.svc.cluster.local:8020
+        - name: CORE_CONF_hadoop_http_staticuser_user
+          value: root
+        - name: CORE_CONF_hadoop_proxyuser_hue_hosts
+          value: '*'
+        - name: CORE_CONF_hadoop_proxyuser_hue_groups
+          value: '*'
+        - name: CORE_CONF_io_compression_codecs
+          value: org.apache.hadoop.io.compress.SnappyCodec
+        - name: HDFS_CONF_dfs_webhdfs_enabled
+          value: 'true'
+        - name: HDFS_CONF_dfs_permissions_enabled
+          value: 'false'
+        - name: HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check
+          value: 'false'
+      resources:
+        limits:
+          memory: 400Mi
+        requests:
+          cpu: 100m
+          memory: 400Mi
+      volumeMounts:
+        - name: h-data
+          mountPath: /hadoop/dfs/data
+      readinessProbe:
+        httpGet:
+          path: /
+          port: 9864
+        timeoutSeconds: 1
+        periodSeconds: 10
+        successThreshold: 1
+        failureThreshold: 3
+      terminationMessagePolicy: File
+      imagePullPolicy: IfNotPresent
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 30
+  dnsPolicy: ClusterFirst
+  serviceAccountName: default
+  serviceAccount: default
+  securityContext: {}
+  hostname: d1-hadoop
+  subdomain: apache-hadoop-dn
+  schedulerName: default-scheduler
+  tolerations:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+  priority: 0
+  enableServiceLinks: true
+  preemptionPolicy: PreemptLowerPriority
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: apache-hadoop-dn
+  namespace: apache
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: 'true'
+spec:
+  ports:
+    - protocol: TCP
+      name: p64
+      port: 9864
+      targetPort: 9864
+    - protocol: TCP
+      name: p67
+      port: 9867
+      targetPort: 9867
+    - protocol: TCP
+      name: p8020
+      port: 8020
+      targetPort: 8020
+  selector:
+    app: dn-hadoop
+  clusterIP: None
+  type: ClusterIP
+  sessionAffinity: None
+  publishNotReadyAddresses: true

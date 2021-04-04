@@ -1,0 +1,243 @@
+# --cluster-cidr=10.244.0.0/16
+# --service-cluster-ip-range=10.96.0.0/12
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: openvpn-cfg
+  namespace: kube-system
+data:
+  openvpn.tmpl: |
+    server ${OVPN_NETWORK_ROUTE}
+    topology subnet
+    verb ${OVPN_VERB}
+
+    # Filled by Secrets object. Use generic names
+    key ${EASYRSA_PKI}/private.key
+    ca ${EASYRSA_PKI}/ca.crt
+    cert ${EASYRSA_PKI}/certificate.crt
+
+    dh ${EASYRSA_PKI}/dh.pem
+    tls-auth ${EASYRSA_PKI}/ta.key
+
+    # ecdh-curve secp256k1
+
+    key-direction 0
+    keepalive 10 60
+    persist-key
+    persist-tun
+    push "block-outside-dns"
+
+    proto ${OVPN_PROTO}
+    cipher ${OVPN_CIPHER}
+    tls-cipher ${OVPN_TLS_CIPHER}
+
+    # Rely on scheduler to do port mapping, internally always 1194
+    port 1194
+    dev tun0
+
+    user nobody
+    group nogroup
+
+    push "dhcp-option DOMAIN ${OVPN_K8S_DOMAIN}"
+    push "dhcp-option DNS ${OVPN_K8S_DNS}"
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: openvpn-crl
+  namespace: kube-system
+data:
+  crl.pem: |
+    -----BEGIN X509 CRL-----
+    cert
+    -----END X509 CRL-----
+
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openvpn-pki
+  namespace: kube-system
+type: Opaque
+data:
+  private.key: >-
+    key
+  ca.crt: >-
+    cert
+  certificate.crt: >-
+    cert
+  dh.pem: >-
+    pem
+  ta.key: >-
+    key
+
+
+#  private.key: "$($base64 pki/private/${OVPN_CN}.key)"
+#  ca.crt: "$($base64 pki/ca.crt)"
+#  certificate.crt: "$($base64 pki/issued/${OVPN_CN}.crt)"
+#  dh.pem: "$($base64 pki/dh.pem)"
+#  ta.key: "$($base64 pki/ta.key)"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openvpn-settings
+  namespace: kube-system
+data:
+  servicecidr: "10.96.0.0/12"
+  podcidr: "10.244.0.0/16"
+  serverurl: "tcp://host:1194"
+  domain: "host"
+  statusfile: "/etc/openvpn/status/server.status"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: kube-system
+  labels:
+    openvpn: host
+  name: openvpn
+spec:
+  type: NodePort
+  ports:
+    - port: 1194
+      protocol: TCP
+      targetPort: 1194
+  selector:
+    openvpn: host
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openvpn-ccd
+  namespace: kube-system
+data:
+  example: "ifconfig-push 10.140.0.5 255.255.255.0"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openvpn-portmapping
+  namespace: kube-system
+data:
+  20080: "example:80"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openvpn
+  namespace: kube-system
+spec:
+  revisionHistoryLimit: 1
+  replicas: 1
+  selector:
+    matchLabels:
+      openvpn: host
+  template:
+    metadata:
+      labels:
+        openvpn: host
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9176"
+    spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: openvpn
+          image: quay.io/plange/openvpn:latest
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+          resources:
+            limits:
+              cpu: 200m
+              memory: 100Mi
+            requests:
+              cpu: 100m
+              memory: 50Mi
+          volumeMounts:
+            - mountPath: /etc/openvpn/templates/
+              name: openvpn-cfg
+            - mountPath: /etc/openvpn/pki
+              name: openvpn-pki
+            - mountPath: /etc/openvpn/crl
+              name: openvpn-crl
+            - mountPath: /etc/openvpn/ccd
+              name: openvpn-ccd
+            - mountPath: /etc/openvpn/portmapping
+              name: openvpn-portmapping
+            - mountPath: /etc/openvpn/status
+              name: openvpn-status
+          ports:
+            - name: openvpn
+              containerPort: 1194
+          env:
+            - name: PODIPADDR
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: OVPN_SERVER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: openvpn-settings
+                  key: serverurl
+            - name: OVPN_K8S_SERVICE_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: openvpn-settings
+                  key: servicecidr
+            - name: OVPN_K8S_POD_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: openvpn-settings
+                  key: podcidr
+            - name: OVPN_K8S_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: openvpn-settings
+                  key: domain
+            - name: OVPN_STATUS
+              valueFrom:
+                configMapKeyRef:
+                  name: openvpn-settings
+                  key: statusfile
+        - name: metrics
+          image: quay.io/plange/openvpn_exporter:latest
+          ports:
+            - name: openvpn
+              containerPort: 9176
+          volumeMounts:
+            - mountPath: /etc/openvpn_exporter/
+              name: openvpn-status
+      volumes:
+        - name: openvpn-cfg
+          configMap:
+            defaultMode: 0555
+            name: openvpn-cfg
+        - name: openvpn-pki
+          secret:
+            secretName: openvpn-pki
+            defaultMode: 0400
+        - name: openvpn-ccd
+          configMap:
+            name: openvpn-ccd
+        - name: openvpn-crl
+          configMap:
+            defaultMode: 0555
+            name: openvpn-crl
+        - name: openvpn-portmapping
+          configMap:
+            name: openvpn-portmapping
+        - name: openvpn-status
+          emptyDir: {}
