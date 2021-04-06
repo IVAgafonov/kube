@@ -105,7 +105,7 @@ spec:
       port: 16030
       targetPort: 16030
   selector:
-    app: hbase-master
+    app: hbase-region
   clusterIP: None
   type: ClusterIP
   sessionAffinity: None
