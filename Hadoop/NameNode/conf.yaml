@@ -10,6 +10,9 @@ spec:
   volumes:
     - name: h-name
       emptyDir: {}
+    - name: m1share
+      persistentVolumeClaim:
+        claimName: m1share
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -51,13 +54,15 @@ spec:
           value: 'false'
       resources:
         limits:
-          memory: 400Mi
+          memory: 4000Mi
         requests:
           cpu: 100m
           memory: 400Mi
       volumeMounts:
         - name: h-name
           mountPath: /hadoop/dfs/name
+        - name: m1share
+          mountPath: /m1share
       readinessProbe:
         httpGet:
           path: /
@@ -114,3 +119,43 @@ spec:
   type: ClusterIP
   sessionAffinity: None
   publishNotReadyAddresses: true
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-storage
+provisioner: kubernetes.io/no-provisioner
+parameters:
+  type: Local
+volumeBindingMode: WaitForFirstConsumer
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: m1share
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/m1share"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: m1share
+  namespace: apache
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

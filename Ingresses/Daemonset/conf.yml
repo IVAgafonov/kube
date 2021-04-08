@@ -141,6 +141,15 @@ spec:
       labels:
         k8s-app: nginx-ingress-controller
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: front-role
+                    operator: In
+                    values:
+                      - ingress
       containers:
         - name: nginx-ingress-lb
           image: 'k8s.gcr.io/ingress-nginx/controller:v0.44.0'
