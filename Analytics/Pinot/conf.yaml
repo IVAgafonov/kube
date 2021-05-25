@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pinot-controller
+  namespace: apache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pinot-controller
+  template:
+    metadata:
+      name: pinot-controller
+      labels:
+        app: pinot-controller
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - host
+      containers:
+        - name: pinot-controller
+          image: apachepinot/pinot:release-0.7.1-jdk11
+          args: ["StartController", "-zkAddress", "zkd-0.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-1.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-2.zkd-hs.zookeeper.svc.cluster.local:2181", "-clusterName", "PinotCluster", "-controllerPort", "9000"]
+          ports:
+            - name: cp
+              containerPort: 9000
+          resources:
+            requests:
+              memory: 200Mi
+              cpu: "100m"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pinot-broker
+  namespace: apache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pinot-broker
+  template:
+    metadata:
+      name: pinot-broker
+      labels:
+        app: pinot-broker
+    spec:
+      containers:
+        - name: pinot-broker
+          image: apachepinot/pinot:release-0.7.1-jdk11
+          args: ["StartBroker", "-zkAddress", "zkd-0.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-1.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-2.zkd-hs.zookeeper.svc.cluster.local:2181"]
+          resources:
+            requests:
+              memory: 200Mi
+              cpu: "100m"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pinot-server
+  namespace: apache
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pinot-server
+  template:
+    metadata:
+      name: pinot-server
+      labels:
+        app: pinot-server
+    spec:
+      containers:
+        - name: pinot-server
+          image: apachepinot/pinot:release-0.7.1-jdk11
+          args: ["StartServer", "-zkAddress", "zkd-0.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-1.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-2.zkd-hs.zookeeper.svc.cluster.local:2181"]
+          resources:
+            requests:
+              memory: 200Mi
+              cpu: "100m"
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: pinot-controller
+  namespace: apache
+spec:
+  selector:
+    app: pinot-controller
+  ports:
+    - protocol: TCP
+      port: 9000
+      targetPort: 9000

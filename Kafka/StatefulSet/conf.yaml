@@ -100,8 +100,6 @@ spec:
             - name: JMX_PORT
               value: '5555'
           resources:
-            limits:
-              memory: 600Mi
             requests:
               cpu: 100m
               memory: 100Mi

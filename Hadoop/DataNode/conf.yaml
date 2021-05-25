@@ -49,9 +49,13 @@ spec:
           value: 'false'
         - name: HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check
           value: 'false'
+        - name: HDFS_CONF_dfs_namenode_replication_work_multiplier_per_iteration
+          value: '2'
+        - name: HDFS_CONF_dfs_namenode_replication_max-streams
+          value: '2'
+        - name: HDFS_CONF_dfs_namenode_replication_max-streams-hard-limit
+          value: '4'
       resources:
-        limits:
-          memory: 4000Mi
         requests:
           cpu: 100m
           memory: 400Mi
@@ -81,11 +85,11 @@ spec:
     - key: node.kubernetes.io/not-ready
       operator: Exists
       effect: NoExecute
-      tolerationSeconds: 300
+      tolerationSeconds: 3600
     - key: node.kubernetes.io/unreachable
       operator: Exists
       effect: NoExecute
-      tolerationSeconds: 300
+      tolerationSeconds: 3600
   priority: 0
   enableServiceLinks: true
   preemptionPolicy: PreemptLowerPriority

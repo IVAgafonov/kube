@@ -181,7 +181,7 @@ spec:
       resources:
         requests:
           cpu: 100m
-          memory: 1Gi
+          memory: 200Mi
       volumeMounts:
         - name: zookeeper-config
           mountPath: /opt/zookeeper/conf/zoo.cfg
@@ -235,11 +235,11 @@ spec:
     - key: node.kubernetes.io/not-ready
       operator: Exists
       effect: NoExecute
-      tolerationSeconds: 300
+      tolerationSeconds: 90000
     - key: node.kubernetes.io/unreachable
       operator: Exists
       effect: NoExecute
-      tolerationSeconds: 300
+      tolerationSeconds: 90000
   priority: 0
   enableServiceLinks: true
   preemptionPolicy: PreemptLowerPriority

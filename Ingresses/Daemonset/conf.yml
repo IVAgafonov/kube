@@ -19,6 +19,7 @@ rules:
       - nodes
       - ingresses
       - ingresses/status
+      - ingressclasses
       - pods
       - configmaps
       - events

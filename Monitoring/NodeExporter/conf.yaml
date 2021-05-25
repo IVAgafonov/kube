@@ -75,5 +75,3 @@ spec:
       protocol: TCP
       port: 9100
       targetPort: 9100
-
----

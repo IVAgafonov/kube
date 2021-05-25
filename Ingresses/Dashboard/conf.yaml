@@ -13,6 +13,24 @@ type: kubernetes.io/tls
 
 
 ---
+kind: Service
+apiVersion: v1
+metadata:
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+  labels:
+    k8s-app: kubernetes-dashboard
+spec:
+  ports:
+    - protocol: TCP
+      port: 443
+      targetPort: 8443
+  selector:
+    k8s-app: kubernetes-dashboard
+  type: ClusterIP
+  sessionAffinity: None
+
+---
 kind: Ingress
 apiVersion: extensions/v1beta1
 metadata:
@@ -43,20 +61,3 @@ spec:
               servicePort: 8443
 
 
----
-kind: Service
-apiVersion: v1
-metadata:
-  name: kubernetes-dashboard
-  namespace: kubernetes-dashboard
-  labels:
-    k8s-app: kubernetes-dashboard
-spec:
-  ports:
-    - protocol: TCP
-      port: 443
-      targetPort: 8443
-  selector:
-    k8s-app: kubernetes-dashboard
-  type: ClusterIP
-  sessionAffinity: None

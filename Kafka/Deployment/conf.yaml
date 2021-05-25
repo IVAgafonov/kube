@@ -1,14 +1,9 @@
-kind: Namespace
-apiVersion: v1
-metadata:
-  name: kafka
-
 ---
 kind: ConfigMap
 apiVersion: v1
 metadata:
   name: kafka-config
-  namespace: kafka
+  namespace: apache
 data:
   init.sh: >-
     #!/bin/bash
@@ -395,7 +390,7 @@ data:
 
     # root directory for all kafka znodes.
 
-    zookeeper.connect=zk-cs:2181
+    zookeeper.connect=zkd-0.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-1.zkd-hs.zookeeper.svc.cluster.local:2181,zkd-2.zkd-hs.zookeeper.svc.cluster.local:2181
 
     # Timeout in ms for connecting to zookeeper
 
@@ -430,7 +425,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: default
-    namespace: kafka
+    namespace: apache
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -441,7 +436,7 @@ kind: Pod
 apiVersion: v1
 metadata:
   name: kafka-0
-  namespace: kafka
+  namespace: apache
   labels:
     app: kafka
 spec:
@@ -477,6 +472,8 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
+        - name: KAFKA_BROKER_ID
+          value: 0
       resources: {}
       volumeMounts:
         - name: configmap
@@ -534,8 +531,6 @@ spec:
         - name: JMX_PORT
           value: '5555'
       resources:
-        limits:
-          memory: 600Mi
         requests:
           cpu: 100m
           memory: 100Mi
@@ -574,11 +569,11 @@ spec:
     - key: node.kubernetes.io/not-ready
       operator: Exists
       effect: NoExecute
-      tolerationSeconds: 300
+      tolerationSeconds: 90000
     - key: node.kubernetes.io/unreachable
       operator: Exists
       effect: NoExecute
-      tolerationSeconds: 300
+      tolerationSeconds: 90000
   priority: 0
   enableServiceLinks: true
   preemptionPolicy: PreemptLowerPriority
@@ -594,8 +589,8 @@ apiVersion: v1
 metadata:
   name: kafka
   namespace: kafka
-  annotations:
-    service.alpha.kubernetes.io/tolerate-unready-endpoints: 'true'
+#  annotations:
+#    service.alpha.kubernetes.io/tolerate-unready-endpoints: 'true'
 spec:
   ports:
     - protocol: TCP

@@ -14,19 +14,65 @@ spec:
       labels:
         app: grafana
     spec:
+      volumes:
+        - name: v-grafana
+          persistentVolumeClaim:
+            claimName: v-grafana
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - host
       containers:
         - name: grafana
           image: grafana/grafana:latest
           ports:
             - name: grafana
               containerPort: 3000
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: v-grafana
+              mountPath: /var/lib/grafana
           resources:
-            limits:
-              memory: "1Gi"
-              cpu: "1000m"
             requests:
-              memory: 500M
-              cpu: "500m"
+              memory: 200Mi
+              cpu: "100m"
+
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: v-grafana
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /v-grafana
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: v-grafana
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  volumeName: v-grafana
+  storageClassName: manual
 
 ---
 kind: Service

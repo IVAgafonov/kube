@@ -84,7 +84,6 @@ spec:
               servicePort: 9090
 
 # docker run -d -e HTTP_PORT=9000 --name zn --restart unless-stopped --network=host elkozmon/zoonavigator:latest
-
 # internal service with port forwarding
 
 ---

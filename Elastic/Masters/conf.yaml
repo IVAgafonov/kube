@@ -76,8 +76,8 @@ spec:
                 resourceFieldRef:
                   resource: limits.cpu
           resources:
-            limits:
-              cpu: 2
+            request:
+              cpu: 100m
           ports:
             - containerPort: 9300
               name: transport

@@ -1,0 +1,74 @@
+# /usr/local/etc/redis/redis.conf
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: redis-config
+  namespace: default
+data:
+  redis.conf: |
+    bind * -::*
+    protected-mode yes
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 3600
+    daemonize no
+    pidfile /var/run/redis_6379.pid
+    loglevel notice
+    logfile ""
+    databases 16
+    always-show-logo no
+    set-proc-title yes
+    proc-title-template "{title} {listen-addr} {server-mode}"
+    save ""
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-server
+  labels:
+    app: redis
+  namespace: default
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: redis-server
+          image: redis:6.2.3
+          volumeMounts:
+            - name: redis-config-volume
+              mountPath: /usr/local/etc/redis/redis.conf
+              subPath: redis.conf
+          ports:
+            - containerPort: 6379
+      volumes:
+        - name: redis-config-volume
+          configMap:
+            name: redis-config
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: redis-service
+  namespace: default
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379

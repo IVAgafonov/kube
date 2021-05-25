@@ -8,11 +8,12 @@ metadata:
     app: nn-hadoop
 spec:
   volumes:
-    - name: h-name
-      emptyDir: {}
     - name: m1share
       persistentVolumeClaim:
         claimName: m1share
+    - name: hadoop-nn
+      persistentVolumeClaim:
+        claimName: hadoop-nn
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -46,20 +47,30 @@ spec:
           value: '*'
         - name: CORE_CONF_io_compression_codecs
           value: org.apache.hadoop.io.compress.SnappyCodec
+        - name: HDFS_CONF_dfs_namenode_name_dir
+          value: '/hadoop/dfs/name'
         - name: HDFS_CONF_dfs_webhdfs_enabled
           value: 'true'
         - name: HDFS_CONF_dfs_permissions_enabled
           value: 'false'
         - name: HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check
           value: 'false'
+        - name: HDFS_CONF_dfs_namenode_replication_work_multiplier_per_iteration
+          value: '2'
+        - name: HDFS_CONF_dfs_namenode_replication_max-streams
+          value: '2'
+        - name: HDFS_CONF_dfs_namenode_replication_max-streams-hard-limit
+          value: '4'
       resources:
-        limits:
-          memory: 4000Mi
+#        limits:
+#          memory: 8000Mi
         requests:
           cpu: 100m
           memory: 400Mi
       volumeMounts:
-        - name: h-name
+        - name: hadoop-nn
+          mountPath: /tmp/hadoop-root/dfs/name
+        - name: hadoop-nn
           mountPath: /hadoop/dfs/name
         - name: m1share
           mountPath: /m1share
@@ -86,11 +97,11 @@ spec:
     - key: node.kubernetes.io/not-ready
       operator: Exists
       effect: NoExecute
-      tolerationSeconds: 300
+      tolerationSeconds: 90000
     - key: node.kubernetes.io/unreachable
       operator: Exists
       effect: NoExecute
-      tolerationSeconds: 300
+      tolerationSeconds: 90000
   priority: 0
   enableServiceLinks: true
   preemptionPolicy: PreemptLowerPriority
@@ -147,15 +158,47 @@ spec:
     path: "/m1share"
 
 ---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: hadoop-nn
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /hadoop-nn
+
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: m1share
   namespace: apache
 spec:
-  storageClassName: manual
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
       storage: 10Gi
+  volumeName: m1share
+  storageClassName: manual
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hadoop-nn
+  namespace: apache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: hadoop-nn
+  storageClassName: manual

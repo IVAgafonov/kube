@@ -49,11 +49,9 @@ spec:
         - name: HBASE_MANAGES_ZK
           value: "false"
       resources:
-        limits:
-          memory: 800Mi
         requests:
-          cpu: 200m
-          memory: 400Mi
+          cpu: 100m
+          memory: 200Mi
       readinessProbe:
         httpGet:
           path: /
