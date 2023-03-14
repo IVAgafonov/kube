@@ -1,0 +1,132 @@
+docker network create -d bridge apache
+
+docker run -d --network apache -p 8080:8080 -p 7077:7077 -e SPARK_MODE=master --name spark bitnami/spark:3.3.1
+docker run -d --network apache -e SPARK_MODE=worker -e SPARK_MASTER_URL=spark://spark:7077 -e SPARK_WORKER_WEBUI_PORT=8081 -p 8081:8081 -e SPARK_LOCAL_HOSTNAME=spark-worker-1 --name spark-worker-1 bitnami/spark:3.3.1
+docker run -d --network apache -e SPARK_MODE=worker -e SPARK_MASTER_URL=spark://spark:7077 -e SPARK_WORKER_WEBUI_PORT=8082 -p 8082:8082 -e SPARK_LOCAL_HOSTNAME=spark-worker-2 --name spark-worker-2 bitnami/spark:3.3.1
+docker run -d --network apache -e SPARK_MODE=worker -e SPARK_MASTER_URL=spark://spark:7077 -e SPARK_WORKER_WEBUI_PORT=8083 -p 8083:8083 -e SPARK_LOCAL_HOSTNAME=spark-worker-3 --name spark-worker-3 bitnami/spark:3.3.1
+
+docker run -d \
+  --name=hadoop-master \
+  --network=apache \
+  -e CLUSTER_NAME=test \
+  -e CORE_CONF_fs_defaultFS=hadoop-master:8020 \
+  -e CORE_CONF_hadoop_http_staticuser_user=root \
+  -e CORE_CONF_hadoop_proxyuser_hue_hosts=* \
+  -e CORE_CONF_hadoop_proxyuser_hue_groups=* \
+  -e CORE_CONF_io_compression_codecs=org.apache.hadoop.io.compress.SnappyCodec \
+  -e HDFS_CONF_dfs_namenode_name_dir=/hadoop/dfs/name \
+  -e HDFS_CONF_dfs_webhdfs_enabled=true \
+  -e HDFS_CONF_dfs_permissions_enabled=false \
+  -e HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check=false \
+  -e HDFS_CONF_dfs_namenode_replication_work_multiplier_per_iteration=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams-hard-limit=4 \
+  -e HDFS_CONF_dfs_blocksize=8388608 \
+  -p 9870:9870 \
+  --restart unless-stopped \
+  bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+
+
+docker run -d \
+  --name=hadoop-master \
+  --network=apache \
+  -e CLUSTER_NAME=test \
+  -e CORE_CONF_fs_defaultFS=hadoop-master:8020 \
+  -e CORE_CONF_hadoop_http_staticuser_user=root \
+  -e CORE_CONF_hadoop_proxyuser_hue_hosts=* \
+  -e CORE_CONF_hadoop_proxyuser_hue_groups=* \
+  -e CORE_CONF_io_compression_codecs=org.apache.hadoop.io.compress.SnappyCodec \
+  -e HDFS_CONF_dfs_namenode_name_dir=/hadoop/dfs/name \
+  -e HDFS_CONF_dfs_webhdfs_enabled=true \
+  -e HDFS_CONF_dfs_permissions_enabled=false \
+  -e HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check=false \
+  -e HDFS_CONF_dfs_namenode_replication_work_multiplier_per_iteration=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams-hard-limit=4 \
+  --mount type=bind,source="$(pwd)"/hdfs-sitem.xml,target=/etc/hadoop/hdfs-site.xml \
+  -p 9870:9870 \
+  --restart unless-stopped \
+  bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+
+
+docker run -d \
+  --name=hadoop-worker-1 \
+  --network=apache \
+  -e SERVICE_PRECONDITION=hadoop-master:9870 \
+  -e CORE_CONF_fs_defaultFS=hdfs://hadoop-master:8020 \
+  -e CORE_CONF_hadoop_http_staticuser_user=root \
+  -e CORE_CONF_hadoop_proxyuser_hue_hosts=* \
+  -e CORE_CONF_hadoop_proxyuser_hue_groups=* \
+  -e CORE_CONF_io_compression_codecs=org.apache.hadoop.io.compress.SnappyCodec \
+  -e HDFS_CONF_dfs_webhdfs_enabled=true \
+  -e HDFS_CONF_dfs_permissions_enabled=false \
+  -e HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check=false \
+  -e HDFS_CONF_dfs_namenode_replication_work_multiplier_per_iteration=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams-hard-limit=4 \
+  --mount type=bind,source="$(pwd)"/hdfs-site1.xml,target=/etc/hadoop/hdfs-site.xml \
+  -p 9871:9871 \
+  --restart unless-stopped \
+  bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+
+
+docker run -d \
+  --name=hadoop-worker-2 \
+  --network=apache \
+  -e SERVICE_PRECONDITION=hadoop-master:9870 \
+  -e CORE_CONF_fs_defaultFS=hdfs://hadoop-master:8020 \
+  -e CORE_CONF_hadoop_http_staticuser_user=root \
+  -e CORE_CONF_hadoop_proxyuser_hue_hosts=* \
+  -e CORE_CONF_hadoop_proxyuser_hue_groups=* \
+  -e CORE_CONF_io_compression_codecs=org.apache.hadoop.io.compress.SnappyCodec \
+  -e HDFS_CONF_dfs_webhdfs_enabled=true \
+  -e HDFS_CONF_dfs_permissions_enabled=false \
+  -e HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check=false \
+  -e HDFS_CONF_dfs_namenode_replication_work_multiplier_per_iteration=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams-hard-limit=4 \
+  -p 9872:9872 \
+  --mount type=bind,source="$(pwd)"/hdfs-site2.xml,target=/etc/hadoop/hdfs-site.xml \
+  --restart unless-stopped \
+  bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+
+docker run -d \
+  --name=hadoop-worker-3 \
+  --network=apache \
+  -e SERVICE_PRECONDITION=hadoop-master:9870 \
+  -e CORE_CONF_fs_defaultFS=hdfs://hadoop-master:8020 \
+  -e CORE_CONF_hadoop_http_staticuser_user=root \
+  -e CORE_CONF_hadoop_proxyuser_hue_hosts=* \
+  -e CORE_CONF_hadoop_proxyuser_hue_groups=* \
+  -e CORE_CONF_io_compression_codecs=org.apache.hadoop.io.compress.SnappyCodec \
+  -e HDFS_CONF_dfs_webhdfs_enabled=true \
+  -e HDFS_CONF_dfs_permissions_enabled=false \
+  -e HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check=false \
+  -e HDFS_CONF_dfs_namenode_replication_work_multiplier_per_iteration=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams=2 \
+  -e HDFS_CONF_dfs_namenode_replication_max-streams-hard-limit=4 \
+  --mount type=bind,source="$(pwd)"/hdfs-site3.xml,target=/etc/hadoop/hdfs-site.xml \
+  -p 9873:9873 \
+  --restart unless-stopped \
+  bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+
+
+hadoop fs -D dfs.block.size=8388608
+
+<property><name>dfs.datanode.http.address</name><value>0.0.0.0:9872</value></property>
+<property><name>dfs.blocksize</name><value>8388608</value></property>
+
+
+docker run -d \
+  --name=openssh-server \
+  --hostname=openssh-server \
+  --network=apache \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -e TZ=Etc/UTC \
+  -e SUDO_ACCESS=false \
+  -e PASSWORD_ACCESS=false \
+  -e USER_NAME=root \
+  -p 2222:2222 \
+  --restart unless-stopped \
+  openssd-for-sshuttle
